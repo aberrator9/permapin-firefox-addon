@@ -48,7 +48,7 @@
 import { onMounted, ref, watch } from 'vue'
 import Logo from './components/Logo.vue'
 
-const pinnedTabs = ref([])
+let pinnedTabs = []
 const syncPinnedTabs = ref(false)
 const pinTo = ref('respective windows')
 
@@ -56,18 +56,35 @@ const pinTo = ref('respective windows')
 //   return tabs.map((t) => t.url).join('\n')
 // }
 
-const storePins = async () => {
-  pinnedTabs.value = await browser.tabs.query({ pinned: true })
-  localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs.value))
+const retrievePins = async (storedPins) => {
+  const storedPinsArr = JSON.parse(storedPins)
+  
+  pinnedTabs = await browser.tabs.query({ pinned: true })
+  const pinnedTabUrlsSet = new Set(pinnedTabs.map((x) => x.url))
 
-  console.log(pinnedTabs.value)
+  const missingTabs = storedPinsArr.filter((x) => !pinnedTabUrlsSet.has(x.url))
+  
+  missingTabs.forEach(tab => {
+      const newTab = browser.tabs.create({
+        pinned: true,
+        url: tab.url,
+        windowId: tab.windowId
+      })
+  });
+}
+
+const storePins = async () => {
+  pinnedTabs = await browser.tabs.query({ pinned: true })
+  console.log(pinnedTabs)
+  
+  localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs))
 }
 
 onMounted(() => {
   const storedPins = localStorage.getItem('pinnedTabs')
   if (storedPins) {
     try {
-      pinnedTabs.value = JSON.parse(storedPins)
+      retrievePins(storedPins)
     } catch (e) {
       console.error(e);
     }
@@ -78,7 +95,7 @@ onMounted(() => {
 
 watch(pinnedTabs.value, () => {
   if(syncPinnedTabs) {
-    localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs.value))
+    localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs))
   }
 },
   { deep: true }
