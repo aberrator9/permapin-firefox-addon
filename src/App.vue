@@ -8,22 +8,34 @@
 
     <main>
 
-      <div class="flex flex-col gap-4 items-center">
+      <!-- <div class="flex flex-col gap-4 items-center">
         <label for="urls" class="text-cyan-50 text-lg">Urls (separate with commas or new line):</label>
         <textarea v-model="urls" @blur="parseUrls()" name="urls"
-          class="flex-auto resize-none border-cyan-600 border-2 bg-cyan-50 font-medium text-lg rounded-md w-96">
+          class="flex-auto resize-none border-cyan-600 border-2 bg-cyan-50 rounded-md break-all w-96 h-64">
         </textarea>
-      </div>
+      </div> -->
 
-      <div class="flex justify-self-center justify-between max-w-96 mx-auto my-4">
-        <button @click="useCurrentlyPinned()" class="bg-cyan-900 hover:bg-cyan-700 active:bg-cyan-800 text-cyan-50 border-2 border-cyan-300 rounded-md px-2 py-1">
-          Use currently pinned
-        </button>
+      <div class="flex flex-col max-w-96 mx-auto my-4 space-y-4 items-center">
         <div class="inline-flex flex-initial items-center gap-x-2">
-          <Input type="checkbox" v-model="pinToAllWindows"
-            class="bg-cyan-900 text-cyan-50 border-2 border-cyan-300 rounded-md"></Input>
-          <p class="text-cyan-50">Pin to all windows</p>
+          <div class="text-cyan-50">Pin tabs to:</div>
+          <select v-model="pinTo" class="p-1 bg-cyan-900 hover:bg-cyan-700 text-cyan-50 border-2 border-cyan-300 rounded-md">
+            <option>respective windows</option>
+            <option>main window</option>
+            <option>all windows</option>
+          </select>
         </div>
+        <div class="inline-flex flex-initial items-center gap-x-2">
+          <input type="checkbox" v-model="syncPinnedTabs"
+          class="bg-cyan-900 text-cyan-50 border-2 border-cyan-300 rounded-md" />
+          <p class="text-cyan-50">Automatically update pinned tabs</p>
+        </div>
+        <button @click="storePins()" :disabled="syncPinnedTabs"
+          :class="{
+            'bg-cyan-900 hover:bg-cyan-700 active:bg-cyan-800 text-cyan-50 border-2 border-cyan-300 rounded-md px-2 py-1': !syncPinnedTabs,
+            'bg-gray-600 text-gray-300 border-2 border-gray-500 rounded-md px-2 py-1': syncPinnedTabs
+          }">
+          Update pinned tabs now
+        </button>
       </div>
 
     </main>
@@ -33,26 +45,44 @@
 
 <script setup>
 
-import { ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import Logo from './components/Logo.vue'
 
-const pinToAllWindows = ref(false)
-const urls = ref('')
-let tabs = []
+const pinnedTabs = ref([])
+const syncPinnedTabs = ref(false)
+const pinTo = ref('respective windows')
 
-const parseUrls = () => {
-  tabs = urls.value.split(/[,\s]+/)
-  // TODO: Add validation for urls
-  console.log(tabs)
+// const getUrls = (tabs) => {
+//   return tabs.map((t) => t.url).join('\n')
+// }
+
+const storePins = async () => {
+  pinnedTabs.value = await browser.tabs.query({ pinned: true })
+  localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs.value))
+
+  console.log(pinnedTabs.value)
 }
 
-const getUrls = (tabs) => {
-  return tabs.map((t) => t.url).join('\n')
-}
+onMounted(() => {
+  const storedPins = localStorage.getItem('pinnedTabs')
+  if (storedPins) {
+    try {
+      pinnedTabs.value = JSON.parse(storedPins)
+    } catch (e) {
+      console.error(e);
+    }
+  } else {
+    storePins()
+  }
+})
 
-const useCurrentlyPinned = async () => {
-  urls.value = await browser.tabs.query({ pinned: true })
-    .then(getUrls)
-}
+watch(pinnedTabs.value, () => {
+  if(syncPinnedTabs) {
+    localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs.value))
+  }
+},
+  { deep: true }
+);
+
 
 </script>

@@ -9,3 +9,7 @@
   height: 800px;
   place-items: center;
 }
+
+option:hover {
+  background-color: yellow !important;
+}
