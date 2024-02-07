@@ -62,6 +62,7 @@ const retrievePins = async (storedPins) => {
   
   missingTabs.forEach(tab => {
       browser.tabs.create({
+        active: false,
         pinned: true,
         url: tab.url,
         windowId: tab.windowId
