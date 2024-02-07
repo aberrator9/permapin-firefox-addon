@@ -52,10 +52,6 @@ let pinnedTabs = []
 const syncPinnedTabs = ref(false)
 const pinTo = ref('respective windows')
 
-// const getUrls = (tabs) => {
-//   return tabs.map((t) => t.url).join('\n')
-// }
-
 const retrievePins = async (storedPins) => {
   const storedPinsArr = JSON.parse(storedPins)
   
@@ -65,7 +61,7 @@ const retrievePins = async (storedPins) => {
   const missingTabs = storedPinsArr.filter((x) => !pinnedTabUrlsSet.has(x.url))
   
   missingTabs.forEach(tab => {
-      const newTab = browser.tabs.create({
+      browser.tabs.create({
         pinned: true,
         url: tab.url,
         windowId: tab.windowId
@@ -93,13 +89,24 @@ onMounted(() => {
   }
 })
 
-watch(pinnedTabs.value, () => {
-  if(syncPinnedTabs) {
-    localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs))
-  }
-},
-  { deep: true }
-);
+const onTabPinned = (tabId, changeInfo, tabInfo) => {
+  console.log(`Updated tab: ${tabId}`);
+  console.log("Changed attributes: ", changeInfo);
+  console.log("New tab Info: ", tabInfo);
+  // if(syncPinnedTabs) {
+  //   storePins()
+  // }
+}
 
+browser.tabs.onUpdated.addListener(
+  onTabPinned, { properties: ["pinned"] }
+)
+
+// watch(pinnedTabs.value, () => {
+//   if(syncPinnedTabs) {
+//     localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs))
+//     console.log('watch: pinned tab added')
+//   }
+// })
 
 </script>
