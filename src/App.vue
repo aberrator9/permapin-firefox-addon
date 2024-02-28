@@ -109,7 +109,7 @@ const loadPins = async (storedTabs) => {
         active: false,
         pinned: true,
         url: tab.url,
-        windowId: mainWindowId === -1 ? tab.windowId : mainWindowId
+        windowId: mainWindow === -1 ? tab.windowId : mainWindow
       })
     }
   }
@@ -140,29 +140,42 @@ onMounted(() => {
   }
 })
 
-const onTabPinned = async (tabId, props) => {
+const addPin = async (tabId) => {
+  console.log('Adding', tabId)
+  pinnedTabs.value.push(await browser.tabs.query({ index: tabId }))
+
+  if (syncPins.value) {
+    savePins()
+  }
+}
+
+const removePin = async (tabId) => {
+  console.log('Removing', tabId)
+  pinnedTabs.value = pinnedTabs.value.filter((x) => x.id !== tabId)
+
+  if (syncPins.value) {
+    savePins()
+  }
+}
+
+const onTabPinned = (tabId, props) => {
   if (props['pinned']) {
-    pinnedTabs.value.push(await browser.tabs.query({ index: tabId }))
+    addPin(tabId)
   } else {
-    pinnedTabs.value = pinnedTabs.value.filter((x) => x.id !== tabId)
+    removePin(tabId)
   }
 
   if (syncPins.value) {
-    console.log('Sync is on.')
     savePins()
   }
 }
                           
 const onTabRemoved = (tabId, removeInfo) => { // removeInfo properties: windowId, isWindowClosing
-  browser.tabs.query({ index: tabId }, (tabs) => {
-    if (tabs.length > 0) {
-      const removedTab = tabs[0];
-      const wasPinned = removedTab.pinned;
+  removePin(tabId)
+}
 
-      // Now you can check if the removed tab was pinned
-      console.log(`Tab ${tabId} was${wasPinned ? '' : ' not'} pinned and has been removed.`);
-    }
-  });
+const onTabMoved = (tabId, moveInfo) => { // moveInfo properties: windowId, fromIndex, toIndex
+
 }
 
 browser.tabs.onUpdated.addListener(
@@ -171,6 +184,10 @@ browser.tabs.onUpdated.addListener(
 
 browser.tabs.onRemoved.addListener(
   onTabRemoved
+)
+
+browser.tabs.onMoved.addListener(
+  onTabMoved
 )
 
 watch(syncPins, (val) => {
