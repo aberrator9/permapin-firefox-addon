@@ -10,6 +10,7 @@ export default defineConfig({
   ],
   build: {
     emptyOutDir: false,
+    minify: false,
   },
   resolve: {
     alias: {

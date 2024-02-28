@@ -1,0 +1,23 @@
+{
+    "manifest_version": 2,
+    "name": "PinTabsPlus",
+    "version": "1.0.0",
+    "permissions": ["tabs"],
+    "chrome_url_overrides" : {
+        "newtab": "index.html"
+    },
+    "icons": {
+        "48": "assets/logo_48.png",
+        "96": "assets/logo_96.png"
+    },
+    "browser_action": {
+        "default_icon": "src/assets/logo_48.png",
+        "default_title": "Opens PinTabsPlus"
+    },
+    "browser_specific_settings": {
+        "gecko": {
+          "id": "PinTabsPlus@aberrator.com",
+          "strict_min_version": "45.0"
+        }
+      }
+}

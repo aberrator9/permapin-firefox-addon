@@ -3,37 +3,38 @@
 
     <header class="flex items-center justify-center gap-2 mb-2 -translate-x-4">
       <Logo class="w-14"></Logo>
-      <h1 class="text-5xl text-cyan-50">PermaPin</h1>
+      <h1 class="text-5xl text-cyan-50">PinTabsPlus</h1>
     </header>
 
     <main>
-
-      <!-- <div class="flex flex-col gap-4 items-center">
-        <label for="urls" class="text-cyan-50 text-lg">Urls (separate with commas or new line):</label>
-        <textarea v-model="urls" @blur="parseUrls()" name="urls"
-          class="flex-auto resize-none border-cyan-600 border-2 bg-cyan-50 rounded-md break-all w-96 h-64">
-        </textarea>
-      </div> -->
-
       <div class="flex flex-col max-w-96 mx-auto my-4 space-y-4 items-center">
         <div class="inline-flex flex-initial items-center gap-x-2">
           <div class="text-cyan-50">Pin tabs to:</div>
-          <select v-model="pinTo" class="p-1 bg-cyan-900 hover:bg-cyan-700 text-cyan-50 border-2 border-cyan-300 rounded-md">
+          <select v-model="pinTo"
+            class="p-1 bg-cyan-900 hover:bg-cyan-700 text-cyan-50 border-2 border-cyan-300 rounded-md">
             <option>respective windows</option>
-            <option>main window</option>
             <option>all windows</option>
+            <option>main window</option>
+          </select>
+          <select v-show="pinTo === 'main window'" disabled v-model="mainWindow">
+            <!-- <div v-for="" >
+            </div> -->
           </select>
         </div>
         <div class="inline-flex flex-initial items-center gap-x-2">
-          <input type="checkbox" v-model="syncPinnedTabs"
-          class="bg-cyan-900 text-cyan-50 border-2 border-cyan-300 rounded-md" />
+          <input type="checkbox" v-model="keepAlive"
+            class="bg-cyan-900 text-cyan-50 border-2 border-cyan-300 rounded-md" />
+          <p class="text-cyan-50">When closing a window with pinned tabs, move tabs to another window</p>
+        </div>
+        <div class="inline-flex flex-initial items-center gap-x-2">
+          <input type="checkbox" v-model="syncPins"
+            class="bg-cyan-900 text-cyan-50 border-2 border-cyan-300 rounded-md" />
           <p class="text-cyan-50">Automatically update pinned tabs</p>
         </div>
-        <button @click="storePins()" :disabled="syncPinnedTabs"
-          :class="{
-            'bg-cyan-900 hover:bg-cyan-700 active:bg-cyan-800 text-cyan-50 border-2 border-cyan-300 rounded-md px-2 py-1': !syncPinnedTabs,
-            'bg-gray-600 text-gray-300 border-2 border-gray-500 rounded-md px-2 py-1': syncPinnedTabs
-          }">
+        <button @click="savePins()" :disabled="syncPins" :class="{
+          'bg-cyan-900 hover:bg-cyan-700 active:bg-cyan-800 text-cyan-50 border-2 border-cyan-300 rounded-md px-2 py-1': !syncPins,
+          'bg-gray-600 text-gray-300 border-2 border-gray-500 rounded-md px-2 py-1': syncPins
+        }">
           Update pinned tabs now
         </button>
       </div>
@@ -48,66 +49,142 @@
 import { onMounted, ref, watch } from 'vue'
 import Logo from './components/Logo.vue'
 
-let pinnedTabs = []
-const syncPinnedTabs = ref(false)
-const pinTo = ref('respective windows')
+const pinnedTabs = ref([])
+const syncPins = ref(false)
+const keepAlive = ref(false)
+const pinTo = ref('')
 
-const retrievePins = async (storedPins) => {
-  const storedPinsArr = JSON.parse(storedPins)
-  
-  pinnedTabs = await browser.tabs.query({ pinned: true })
-  const pinnedTabUrlsSet = new Set(pinnedTabs.map((x) => x.url))
+const loadPins = async (storedTabs) => {
+  const currentPins = await browser.tabs.query({ pinned: true })
+  const pinnedTabUrlsSet = new Set(currentPins.map((x) => x.url))
 
-  const missingTabs = storedPinsArr.filter((x) => !pinnedTabUrlsSet.has(x.url))
-  
-  missingTabs.forEach(tab => {
+  const missingTabs = storedTabs.filter((x) => !pinnedTabUrlsSet.has(x.url))
+  if (!missingTabs.length) {
+    return
+  }
+
+  if (pinTo === 'main window') {
+    // Determine main window - one with most pinned tabs?
+    // User can select
+    // Move all current tabs there, ideally without changing the windowId in the stored data
+  }
+  else if (pinTo === 'all windows') {
+    // Remove all pinned tabs and replace them with all stored tabs
+  }
+  else {  // Pin to respective windows
+    const storedTabsWindowIdSet = new Set(Object.values(storedTabs).map((x) => x.windowId))
+
+    const tabsWithMissingWindows = missingTabs.filter((t) => !storedTabsWindowIdSet.has(t.windowId))
+    tabsWithMissingWindows.sort((a, b) => a.windowId - b.windowId);
+
+    const tabsByWindowId = {};
+
+    for (const tab of tabsWithMissingWindows) {
+      if (!tabsByWindowId[tab.windowId]) {
+        tabsByWindowId[tab.windowId] = [];
+      }
+      tabsByWindowId[tab.windowId].push(tab);
+    }
+
+    const groupedTabs = Object.values(tabsByWindowId);
+
+    for (const tabGroup of groupedTabs) {
+      console.log('tabGroup urls in', tabGroup[0].windowId, ':', tabGroup.map((t) => t.url))
+      // const newWindow = browser.windows.create()
+
+      // Below creates infinite tabs. Maybe due to the app page being opened repeatedly
+      // for (const tab in tabGroup) {
+      //   browser.tabs.create({
+      //     active: false,
+      //     pinned: true,
+      //     url: tab.url,
+      //     windowId: newWindow.id
+      //   })
+      // }
+    }
+
+    for (const tab of missingTabs) {
+      console.log(tab.url, 'is missing; creating...')
       browser.tabs.create({
         active: false,
         pinned: true,
         url: tab.url,
-        windowId: tab.windowId
+        windowId: mainWindowId === -1 ? tab.windowId : mainWindowId
       })
-  });
+    }
+  }
 }
 
-const storePins = async () => {
-  pinnedTabs = await browser.tabs.query({ pinned: true })
-  console.log(pinnedTabs)
-  
+const savePins = async () => {
+  const pinnedTabs = await browser.tabs.query({ pinned: true })
+  console.log('Saving pins:', pinnedTabs)
+
   localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs))
 }
 
 onMounted(() => {
-  const storedPins = localStorage.getItem('pinnedTabs')
-  if (storedPins) {
+  const storedPinTo = localStorage.getItem('pinTo')
+  pinTo.value = storedPinTo ? storedPinTo : 'respective windows'
+  const storedSync = localStorage.getItem('syncPins')
+  syncPins.value = storedSync ? storedSync : false
+
+  pinnedTabs.value = JSON.parse(localStorage.getItem('pinnedTabs'))
+  if (pinnedTabs) {
     try {
-      retrievePins(storedPins)
+      loadPins(pinnedTabs.value)
     } catch (e) {
-      console.error(e);
+      console.error(e)
     }
   } else {
-    storePins()
+    savePins()
   }
 })
 
-const onTabPinned = (tabId, changeInfo, tabInfo) => {
-  console.log(`Updated tab: ${tabId}`);
-  console.log("Changed attributes: ", changeInfo);
-  console.log("New tab Info: ", tabInfo);
-  // if(syncPinnedTabs) {
-  //   storePins()
-  // }
+const onTabPinned = async (tabId, props) => {
+  if (props['pinned']) {
+    pinnedTabs.value.push(await browser.tabs.query({ index: tabId }))
+  } else {
+    pinnedTabs.value = pinnedTabs.value.filter((x) => x.id !== tabId)
+  }
+
+  if (syncPins.value) {
+    console.log('Sync is on.')
+    savePins()
+  }
+}
+                          
+const onTabRemoved = (tabId, removeInfo) => { // removeInfo properties: windowId, isWindowClosing
+  browser.tabs.query({ index: tabId }, (tabs) => {
+    if (tabs.length > 0) {
+      const removedTab = tabs[0];
+      const wasPinned = removedTab.pinned;
+
+      // Now you can check if the removed tab was pinned
+      console.log(`Tab ${tabId} was${wasPinned ? '' : ' not'} pinned and has been removed.`);
+    }
+  });
 }
 
 browser.tabs.onUpdated.addListener(
-  onTabPinned, { properties: ["pinned"] }
+  onTabPinned, { properties: ['pinned'] }
 )
 
-// watch(pinnedTabs.value, () => {
-//   if(syncPinnedTabs) {
-//     localStorage.setItem('pinnedTabs', JSON.stringify(pinnedTabs))
-//     console.log('watch: pinned tab added')
-//   }
-// })
+browser.tabs.onRemoved.addListener(
+  onTabRemoved
+)
+
+watch(syncPins, (val) => {
+  console.log('syncPins ->', val)
+  localStorage.setItem('syncPins', val)
+
+  if(val === true) {
+    savePins()
+  }
+})
+
+watch(pinTo, (val) => {
+  console.log('pinTo ->', val)
+  localStorage.setItem('pinTo', val)
+})
 
 </script>
