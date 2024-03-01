@@ -19,5 +19,9 @@
           "id": "PinTabsPlus@aberrator.com",
           "strict_min_version": "45.0"
         }
-      }
+      },
+    "background": {
+    "page": "index.html",
+    "persistent": false
+    }
 }
