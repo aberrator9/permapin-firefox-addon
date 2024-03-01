@@ -27,13 +27,13 @@
           <p class="text-cyan-50">When closing a window with pinned tabs, move tabs to another window</p>
         </div>
         <div class="inline-flex flex-initial items-center gap-x-2">
-          <input type="checkbox" v-model="syncPins"
+          <input type="checkbox" v-model="autoSave"
             class="bg-cyan-900 text-cyan-50 border-2 border-cyan-300 rounded-md" />
           <p class="text-cyan-50">Automatically update pinned tabs</p>
         </div>
-        <button @click="savePins()" :disabled="syncPins" :class="{
-          'bg-cyan-900 hover:bg-cyan-700 active:bg-cyan-800 text-cyan-50 border-2 border-cyan-300 rounded-md px-2 py-1': !syncPins,
-          'bg-gray-600 text-gray-300 border-2 border-gray-500 rounded-md px-2 py-1': syncPins
+        <button @click="savePins()" :disabled="autoSave" :class="{
+          'bg-cyan-900 hover:bg-cyan-700 active:bg-cyan-800 text-cyan-50 border-2 border-cyan-300 rounded-md px-2 py-1': !autoSave,
+          'bg-gray-600 text-gray-300 border-2 border-gray-500 rounded-md px-2 py-1': autoSave
         }">
           Update pinned tabs now
         </button>
@@ -49,17 +49,20 @@
 import { onMounted, ref, watch } from 'vue'
 import Logo from './components/Logo.vue'
 
+const mainWindow = ref(-1)
 const pinnedTabs = ref([])
-const syncPins = ref(false)
+const autoSave = ref(false)
 const keepAlive = ref(false)
 const pinTo = ref('')
 
 const loadPins = async (storedTabs) => {
+  console.log('storedTabs', storedTabs)
   const currentPins = await browser.tabs.query({ pinned: true })
-  const pinnedTabUrlsSet = new Set(currentPins.map((x) => x.url))
+  const pinnedTabsIdSet = new Set(currentPins.map((x) => x.id))
 
-  const missingTabs = storedTabs.filter((x) => !pinnedTabUrlsSet.has(x.url))
-  if (!missingTabs.length) {
+  const missingTabs = Object.values(storedTabs).filter((x) => !pinnedTabsIdSet.has(x.id))
+  console.log('missingTabs', missingTabs)
+  if (missingTabs.length <= 0) {
     return
   }
 
@@ -72,46 +75,24 @@ const loadPins = async (storedTabs) => {
     // Remove all pinned tabs and replace them with all stored tabs
   }
   else {  // Pin to respective windows
-    const storedTabsWindowIdSet = new Set(Object.values(storedTabs).map((x) => x.windowId))
+    const windowIdsSet = new Set(Object.values(await browser.windows.getAll()).map((x) => x.id))
+    const newWindowMap = new Map()
 
-    const tabsWithMissingWindows = missingTabs.filter((t) => !storedTabsWindowIdSet.has(t.windowId))
-    tabsWithMissingWindows.sort((a, b) => a.windowId - b.windowId);
-
-    const tabsByWindowId = {};
-
-    for (const tab of tabsWithMissingWindows) {
-      if (!tabsByWindowId[tab.windowId]) {
-        tabsByWindowId[tab.windowId] = [];
+    for (let tab of missingTabs) {
+      if (!windowIdsSet.has(tab.windowId) && !newWindowMap.has(tab.windowId)) {
+        const newWindow = await browser.windows.create()
+        console.log('Creating missing window', newWindow.id)
+        newWindowMap.set(tab.windowId, newWindow.id)
       }
-      tabsByWindowId[tab.windowId].push(tab);
-    }
 
-    const groupedTabs = Object.values(tabsByWindowId);
-
-    for (const tabGroup of groupedTabs) {
-      console.log('tabGroup urls in', tabGroup[0].windowId, ':', tabGroup.map((t) => t.url))
-      // const newWindow = browser.windows.create()
-
-      // Below creates infinite tabs. Maybe due to the app page being opened repeatedly
-      // for (const tab in tabGroup) {
-      //   browser.tabs.create({
-      //     active: false,
-      //     pinned: true,
-      //     url: tab.url,
-      //     windowId: newWindow.id
-      //   })
-      // }
-    }
-
-    for (const tab of missingTabs) {
-      console.log(tab.url, 'is missing; creating...')
-      browser.tabs.create({
+      await browser.tabs.create({
         active: false,
         pinned: true,
         url: tab.url,
-        windowId: mainWindow === -1 ? tab.windowId : mainWindow
+        windowId: newWindowMap.has(tab.windowId) ? newWindowMap.get(tab.windowId) : tab.windowId
       })
     }
+
   }
 }
 
@@ -126,7 +107,7 @@ onMounted(() => {
   const storedPinTo = localStorage.getItem('pinTo')
   pinTo.value = storedPinTo ? storedPinTo : 'respective windows'
   const storedSync = localStorage.getItem('syncPins')
-  syncPins.value = storedSync ? storedSync : false
+  autoSave.value = storedSync ? storedSync : false
 
   pinnedTabs.value = JSON.parse(localStorage.getItem('pinnedTabs'))
   if (pinnedTabs) {
@@ -144,7 +125,7 @@ const addPin = async (tabId) => {
   console.log('Adding', tabId)
   pinnedTabs.value.push(await browser.tabs.query({ index: tabId }))
 
-  if (syncPins.value) {
+  if (autoSave.value) {
     savePins()
   }
 }
@@ -153,7 +134,7 @@ const removePin = async (tabId) => {
   console.log('Removing', tabId)
   pinnedTabs.value = pinnedTabs.value.filter((x) => x.id !== tabId)
 
-  if (syncPins.value) {
+  if (autoSave.value) {
     savePins()
   }
 }
@@ -164,18 +145,17 @@ const onTabPinned = (tabId, props) => {
   } else {
     removePin(tabId)
   }
-
-  if (syncPins.value) {
-    savePins()
-  }
 }
-                          
+
 const onTabRemoved = (tabId, removeInfo) => { // removeInfo properties: windowId, isWindowClosing
+  if (removeInfo.isWindowClosing) {
+    return;
+  }
   removePin(tabId)
 }
 
 const onTabMoved = (tabId, moveInfo) => { // moveInfo properties: windowId, fromIndex, toIndex
-
+  console.log(`Tab ${tabId} moved from ${moveInfo.fromIndex} to ${moveInfo.toIndex}, windowId: ${moveInfo.windowId}`)
 }
 
 browser.tabs.onUpdated.addListener(
@@ -190,11 +170,11 @@ browser.tabs.onMoved.addListener(
   onTabMoved
 )
 
-watch(syncPins, (val) => {
+watch(autoSave, (val) => {
   console.log('syncPins ->', val)
   localStorage.setItem('syncPins', val)
 
-  if(val === true) {
+  if (val === true) {
     savePins()
   }
 })
